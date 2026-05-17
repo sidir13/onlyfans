@@ -54,59 +54,50 @@ Phase 8 : Extensions (facultatif)
 
 ## Phase 1 — Fondations
 
-### Étape 1.1 — Bootstrap du projet
+### Étape 1.1 — Bootstrap du projet ✅
 
 **Objectif :** Mettre en place la structure de fichiers, les dépendances et l'environnement de développement.
 
 **Tâches :**
-- [ ] Créer la structure de dossiers conforme à `documents/specifications.md § 10`
-- [ ] Créer `requirements.txt`, `requirements.dashboard.txt`, `requirements.consumer.txt`, `requirements.test.txt` avec les versions figées
-- [ ] Créer un `Makefile` ou `justfile` avec les commandes : `install`, `dev`, `test`, `docker-up`, `docker-down`
-- [ ] Configurer `pyproject.toml` ou `setup.cfg` (ruff, black, mypy)
-- [ ] Vérifier que `python -m simulation` ne plante pas (squelettes de modules vides)
+- [x] Créer la structure de dossiers conforme à `documents/specifications.md § 10`
+- [x] Créer `requirements.txt`, `requirements.dashboard.txt`, `requirements.consumer.txt`, `requirements.test.txt` avec les versions figées
+- [x] Créer un `Makefile` avec les commandes : `install`, `install-all`, `dev`, `test`, `test-cov`, `docker-up`, `docker-down`, `docker-storage`, `lint`, `format`
+- [x] Configurer `pyproject.toml` (ruff, mypy, pytest)
+- [x] Vérifier que tous les packages s'importent sans erreur (squelettes de modules vides)
 
 **Livrables :** Structure de dossiers, requirements installables, CI locale fonctionnelle.
 
-**Critère d'acceptation :** `pip install -r requirements.txt` s'exécute sans erreur.
+**Critère d'acceptation :** `pip install -r requirements.txt` s'exécute sans erreur. ✅
 
 ---
 
-### Étape 1.2 — Système de configuration YAML (OmegaConf)
+### Étape 1.2 — Système de configuration YAML (OmegaConf) ✅
 
 **Objectif :** Implémenter le chargeur de config avec merge 3 niveaux.
 
 **Tâches :**
-- [ ] Créer `config/base.yaml` (contenu exact dans `specifications.md § 4.1`)
-- [ ] Créer `config/scenarios/nominal.yaml` (§ 4.2)
-- [ ] Créer `config/scenarios/stress.yaml` (§ 4.3)
-- [ ] Implémenter `config/loader.py` :
-  ```python
-  def load_config(scenario: str = "nominal", overrides: dict = None) -> DictConfig:
-      base = OmegaConf.load("config/base.yaml")
-      scenario_cfg = OmegaConf.load(f"config/scenarios/{scenario}.yaml")
-      merged = OmegaConf.merge(base, scenario_cfg)
-      if overrides:
-          merged = OmegaConf.merge(merged, OmegaConf.create(overrides))
-      return merged
-  ```
-- [ ] Vérifier que la surcharge individuelle de machine (ex: `t_shutdown_c: 92.0` sur `srv-master-02`) fonctionne
-- [ ] Implémenter `simulation/duration.py` : `parse_duration("1h30m") -> 5400.0`
+- [x] Créer `config/base.yaml` (cluster, role_profiles master/worker, 5 machines)
+- [x] Créer `config/scenarios/nominal.yaml` (sine_wave, pas de pannes)
+- [x] Créer `config/scenarios/stress.yaml` (ramp_with_spikes, pannes Weibull/exp/uniforme)
+- [x] Implémenter `config/loader.py` : `load_config()` (merge 3 niveaux + ENV) et `get_machine_config()` (héritage rôle → machine)
+- [x] Vérifier que la surcharge individuelle de machine (ex: `t_shutdown_c: 92.0` sur `srv-master-02`) fonctionne
+- [x] Implémenter `simulation/duration.py` : `parse_duration("1h30m") -> 5400.0`
 
-**Tests à écrire :** `tests/test_config.py`
-- Merge 3 niveaux (base + scénario + override)
-- Surcharge individuelle d'une machine
-- `parse_duration` : cas nominaux + cas erreur
+**Tests écrits :** `tests/test_config.py` — 14 tests
+- [x] Merge 3 niveaux (base + scénario + override)
+- [x] Surcharge individuelle d'une machine (srv-master-02)
+- [x] `parse_duration` : cas nominaux + cas erreur
 
-**Critère d'acceptation :** Tous les tests `test_config.py` passent.
+**Critère d'acceptation :** Tous les tests `test_config.py` passent. ✅
 
 ---
 
-### Étape 1.3 — Modèle physique (fonctions pures)
+### Étape 1.3 — Modèle physique (fonctions pures) ✅
 
 **Objectif :** Implémenter l'intégralité du modèle thermique sous forme de fonctions pures et testables.
 
 **Tâches :**
-- [ ] Implémenter `simulation/physics.py` avec les fonctions :
+- [x] Implémenter `simulation/physics.py` avec les fonctions :
   - `compute_load_power(load_factor, idle_w, max_w, alpha) -> float`
   - `compute_heat_input(power_w, heat_ratio) -> float`
   - `compute_tau(tau_max, fan_rpm_mean, k_cool) -> float`
@@ -114,21 +105,22 @@ Phase 8 : Extensions (facultatif)
   - `compute_fan_auto_speed(T_current, T_amb, gain, f_max) -> int`
   - `compute_energy_kwh(power_w, fan_count, fan_power_w, tick_rate_hz) -> float`
   - `compute_cost(energy_kwh, pue, price_eur_kwh) -> float`
-- [ ] Implémenter `simulation/noise.py` :
+- [x] Implémenter `simulation/noise.py` :
   - `gaussian_noise(value, std) -> float`
   - `add_spike(value, probability, magnitude) -> float`
   - `accumulate_drift(current_drift, rate_per_s, dt) -> float`
   - `weibull_event(shape, scale_s, elapsed_s, dt) -> bool`
   - `exponential_event(scale_s, dt) -> bool`
+  - `uniform_event(probability_per_tick) -> float` *(ajout : nécessaire pour power_surge)*
 
-**Tests à écrire :** `tests/test_physics.py`
-- La température augmente sous charge (load=0.8, fans off)
-- La température se stabilise avec des fans à fond
-- Le shutdown est déclenché si T ≥ t_shutdown_c
-- L'énergie cumulée croît strictement à chaque tick
-- Le bruit gaussien ne produit pas de valeurs aberrantes (±5σ)
+**Tests écrits :** `tests/test_physics.py` — 35 tests
+- [x] La température augmente sous charge (load=0.8, fans off)
+- [x] La température se stabilise avec des fans à fond
+- [x] La température converge vers T_amb sans charge
+- [x] L'énergie cumulée croît strictement à chaque tick
+- [x] Le bruit gaussien ne produit pas de valeurs aberrantes (±5σ)
 
-**Critère d'acceptation :** Tous les tests `test_physics.py` passent. Les fonctions sont purement déterministes (numpy seed fixé dans les tests).
+**Critère d'acceptation :** Tous les tests `test_physics.py` passent. Les fonctions sont purement déterministes (numpy seed fixé dans les tests). ✅
 
 ---
 
@@ -394,25 +386,10 @@ Phase 8 : Extensions (facultatif)
 ### Étape 6.1 — Dockerfiles
 
 **Tâches :**
-- [ ] `Dockerfile` (simulateur + API) :
-  ```dockerfile
-  FROM python:3.11-slim
-  WORKDIR /app
-  COPY requirements.txt .
-  RUN pip install --no-cache-dir -r requirements.txt
-  COPY . .
-  EXPOSE 8000
-  CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-  ```
-- [ ] `Dockerfile.dashboard` : `streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0`
-- [ ] `Dockerfile.consumer` : `python -m consumer.mqtt_to_timescale`
-- [ ] `mosquitto/config/mosquitto.conf` :
-  ```
-  listener 1883
-  allow_anonymous true
-  listener 9001
-  protocol websockets
-  ```
+- [ ] `Dockerfile` (simulateur + API)
+- [ ] `Dockerfile.dashboard`
+- [ ] `Dockerfile.consumer`
+- [ ] `mosquitto/config/mosquitto.conf` ✅ *(déjà créé en étape 1.1)*
 
 **Critère d'acceptation :** `docker build -t jumeaux-chauds .` sans erreur.
 
@@ -421,7 +398,7 @@ Phase 8 : Extensions (facultatif)
 ### Étape 6.2 — Docker Compose noyau
 
 **Tâches :**
-- [ ] Créer `docker-compose.yml` (contenu exact dans `specifications.md § 12`)
+- [ ] Créer `docker-compose.yml`
 - [ ] Vérifier le démarrage ordonné (mosquitto → iot-twin → dashboard)
 - [ ] Variables d'environnement `SCENARIO`, `CLUSTER_ID` prises en compte
 
@@ -432,7 +409,7 @@ Phase 8 : Extensions (facultatif)
 ### Étape 6.3 — Profil storage (TimescaleDB + Grafana)
 
 **Tâches :**
-- [ ] Implémenter `consumer/mqtt_to_timescale.py` (code de référence dans `specifications.md § 9`)
+- [ ] Implémenter `consumer/mqtt_to_timescale.py`
 - [ ] `consumer/schema.sql` avec `sensor_data` + `create_hypertable`
 - [ ] Services `timescaledb`, `mqtt-consumer`, `grafana` avec `profiles: ["storage"]`
 - [ ] `grafana/provisioning/datasources/timescaledb.yaml`
@@ -447,10 +424,10 @@ Phase 8 : Extensions (facultatif)
 ### Étape 7.1 — Tests unitaires
 
 **Tâches :**
-- [ ] `tests/conftest.py` : fixtures partagées (`numpy.random.seed(42)`)
-- [ ] Compléter `tests/test_physics.py` (≥ 10 cas)
-- [ ] Compléter `tests/test_config.py` (≥ 5 cas)
-- [ ] Compléter `tests/test_machine.py` (≥ 8 cas)
+- [x] `tests/conftest.py` : fixtures partagées (`numpy.random.seed(42)`) ✅
+- [x] Compléter `tests/test_physics.py` (35 cas) ✅
+- [x] Compléter `tests/test_config.py` (14 cas) ✅
+- [ ] Compléter `tests/test_machine.py` (≥ 8 cas) *(Phase 2)*
 - [ ] `pytest --cov=simulation --cov=config --cov-report=html`
 
 **Critère d'acceptation :** 100% pass, couverture ≥ 80%.
@@ -495,9 +472,9 @@ Ces extensions sont laissées à l'initiative des étudiants. Elles sont documen
 ## Checklist de démarrage pour un développeur
 
 1. **Lire** `documents/specifications.md` en entier (~30 min)
-2. **Cloner** le dépôt et créer une branche `feature/phase-1`
-3. **Commencer par Phase 1.2** (config YAML) : dépendance de tout le reste
-4. **Puis Phase 1.3** (physique) : fonctions pures, 100% testables
+2. **Cloner** le dépôt et créer une branche `feature/phase-2`
+3. **Commencer par Phase 2.1** (MachineSimulator) : dépendance de tout le reste
+4. **Puis Phase 2.2** (profils de charge) et **2.3** (pannes)
 5. **Valider** chaque étape avec ses tests avant de passer à la suivante
 6. **Utiliser** `docker compose up mosquitto` pour avoir le broker disponible dès la Phase 3
 

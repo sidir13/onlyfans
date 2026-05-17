@@ -1,0 +1,24 @@
+[project]
+name = "jumeaux-chauds"
+version = "1.0.0"
+description = "Simulateur de jumeaux numériques IoT"
+authors = [{name = "Tristan Vanrullen"}]
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

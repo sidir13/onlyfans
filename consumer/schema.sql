@@ -1,0 +1,1 @@
+-- Schéma TimescaleDB pour les données capteurs (implémenté en Phase 6)

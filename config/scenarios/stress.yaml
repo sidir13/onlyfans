@@ -1,0 +1,40 @@
+simulation:
+  mode: "stress"
+  tick_rate_hz: 10.0
+  events_per_sec: 2.0
+  duration: "0"
+
+  load_profile:
+    type: "ramp_with_spikes"
+    ramp_start: 0.20
+    ramp_end: 0.95
+    ramp_duration_s: 600.0
+    spike_probability: 0.02
+    spike_duration_s: 30.0
+    spike_magnitude: 0.30
+
+  noise:
+    enabled: true
+    spike_probability: 0.005
+    spike_magnitude_c: 5.0
+    drift:
+      enabled: true
+      rate_c_per_s: 0.01
+
+  fault_injection:
+    enabled: true
+    faults:
+      - type: "fan_failure"
+        distribution: "weibull"
+        shape: 1.5
+        scale_s: 7200
+        magnitude: 1.0
+      - type: "sensor_drift"
+        distribution: "exponential"
+        scale_s: 3600
+        magnitude: 0.5
+      - type: "power_surge"
+        distribution: "uniform"
+        probability_per_tick: 0.0002
+        magnitude: 1.30
+    recovery_delay_s: 120.0

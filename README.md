@@ -87,7 +87,7 @@ Services supplémentaires :
 | `SCENARIO` | `nominal` | Scénario de charge |
 | `CLUSTER_ID` | `cluster_alpha` | Identifiant du cluster |
 | `MQTT_ENABLED` | `1` | Désactiver MQTT (`0`) |
-| `POSTGRES_PASSWORD` | `jumeaux` | Mot de passe TimescaleDB |
+| `POSTGRES_PASSWORD` | `tspassword` | Mot de passe TimescaleDB |
 
 ### Arrêt et nettoyage
 

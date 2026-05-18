@@ -83,16 +83,45 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _register_signals(
+    loop: asyncio.AbstractEventLoop,
+    simulator: "ClusterSimulator",
+    stop_event: asyncio.Event,
+) -> None:
+    """Enregistre les gestionnaires SIGINT/SIGTERM de facon portable.
+
+    - Unix  : utilise loop.add_signal_handler() (thread-safe, asyncio-natif).
+    - Windows : utilise signal.signal() avec un callback qui planifie
+      l arret via loop.call_soon_threadsafe().
+    """
+
+    def _stop() -> None:
+        logger.info("Signal d arret recu, arret propre en cours...")
+        simulator.stop()
+        stop_event.set()
+
+    if sys.platform == "win32":
+        # Windows : signal.signal() est synchrone ; on reposte dans la boucle asyncio
+        def _win_handler(signum: int, frame: object) -> None:  # noqa: ARG001
+            loop.call_soon_threadsafe(_stop)
+
+        signal.signal(signal.SIGINT, _win_handler)
+        signal.signal(signal.SIGTERM, _win_handler)
+    else:
+        loop.add_signal_handler(signal.SIGINT, _stop)
+        loop.add_signal_handler(signal.SIGTERM, _stop)
+
+
 async def main() -> None:
     args = parse_args()
 
-    # Configurer le niveau de log
     logging.getLogger().setLevel(getattr(logging, args.log_level))
 
-    # Charger la configuration
-    # load_config(scenario, overrides, config_dir) -> DictConfig
-    # Le cluster_id et events_per_sec sont passes via overrides dans le dict de config
-    logger.info("Chargement de la configuration: scenario=%s, cluster=%s", args.scenario, args.cluster)
+    logger.info(
+        "Chargement de la configuration: scenario=%s, cluster=%s",
+        args.scenario,
+        args.cluster,
+    )
     try:
         cfg = load_config(
             scenario=args.scenario,
@@ -111,13 +140,13 @@ async def main() -> None:
         logger.error("Erreur de configuration: %s", e)
         sys.exit(1)
 
-    # Parser la duree
-    # parse_duration retourne 0.0 pour infini, sinon le nombre de secondes
     duration_s = parse_duration(args.duration)
     if duration_s == 0.0:
         logger.info("Duree: infinie (Ctrl+C pour arreter)")
     else:
-        logger.info("Duree: %.0f secondes (%.1f minutes)", duration_s, duration_s / 60)
+        logger.info(
+            "Duree: %.0f secondes (%.1f minutes)", duration_s, duration_s / 60
+        )
 
     logger.info(
         "Events par seconde: %.1f | MQTT: %s",
@@ -125,35 +154,19 @@ async def main() -> None:
         "desactive" if args.no_mqtt else "active",
     )
 
-    # Creer le simulateur
-    # ClusterSimulator(config: dict) - un seul parametre
-    # cluster_id, tick_rate_hz etc. sont lus depuis cfg["cluster"] et cfg["simulation"]
     simulator = ClusterSimulator(config=cfg)
 
-    # Gestion du signal SIGINT (Ctrl+C) et SIGTERM
     loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()
+    _register_signals(loop, simulator, stop_event)
 
-    def _signal_handler() -> None:
-        logger.info("Signal d arret recu, arret propre en cours...")
-        simulator.stop()  # ClusterSimulator.stop() met _running = False
-        stop_event.set()
-
-    loop.add_signal_handler(signal.SIGINT, _signal_handler)
-    loop.add_signal_handler(signal.SIGTERM, _signal_handler)
-
-    # Lancer la simulation
-    # ClusterSimulator.run() n a pas de parametre - arret via simulator.stop()
-    logger.info("Demarrage du simulateur pour le cluster '%s'...", simulator.cluster_id)
+    logger.info(
+        "Demarrage du simulateur pour le cluster '%s'...", simulator.cluster_id
+    )
     try:
         if duration_s > 0.0:
-            # Duree limitee: timeout via asyncio.wait_for
-            await asyncio.wait_for(
-                simulator.run(),
-                timeout=duration_s,
-            )
+            await asyncio.wait_for(simulator.run(), timeout=duration_s)
         else:
-            # Duree infinie: tourne jusqu au Ctrl+C
             await simulator.run()
     except asyncio.TimeoutError:
         logger.info("Duree de simulation atteinte, arret propre.")

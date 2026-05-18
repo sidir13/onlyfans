@@ -2,7 +2,7 @@
 Jumeaux Chauds — Dashboard Streamlit (Phase 5)
 ===============================================
 Lancer :
-    streamlit run dashboard/app.py
+    python -m streamlit run dashboard/app.py
 
 Pré-requis :
     L’API FastAPI doit tourner sur http://localhost:8000
@@ -52,6 +52,9 @@ if "temp_buffers" not in st.session_state:
 if "event_log" not in st.session_state:
     st.session_state.event_log: list[str] = []
 
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
 
 def log_event(msg: str) -> None:
     ts = time.strftime("%H:%M:%S")
@@ -60,18 +63,25 @@ def log_event(msg: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Auto-refresh (remplace @st.fragment pour Streamlit < 1.37)
+# ---------------------------------------------------------------------------
+
+REFRESH_INTERVAL_S = 2  # secondes entre deux reruns automatiques
+
+def _auto_refresh() -> None:
+    """Planifie un st.rerun() si l'intervalle est écoulé."""
+    now = time.time()
+    if now - st.session_state.last_refresh >= REFRESH_INTERVAL_S:
+        st.session_state.last_refresh = now
+        time.sleep(0.05)  # petite pause pour éviter le busy-loop
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 STATUS_COLOR = {"on": "🟢", "off": "⚫", "degraded": "🔴"}
-
-
-def _temp_color(t: float) -> str:
-    if t >= 80:
-        return "#e74c3c"
-    if t >= 65:
-        return "#f39c12"
-    return "#27ae60"
 
 
 def _safe_get(d: dict, *keys, default=None):
@@ -98,8 +108,8 @@ def render_sidebar(snapshot: dict[str, Any] | None) -> None:
             machines = snapshot.get("machines", {})
             nb_on = sum(1 for m_ in machines.values() if m_.get("status") == "on")
             st.metric("💻 Machines actives", f"{nb_on} / {len(machines)}")
-            st.metric("⚡ Puissance totale", f"{m.get('energy_kwh_total', 0):.2f} kWh")
-            st.metric("💶 Coût estimé", f"{m.get('cost_eur_total', 0):.4f} €")
+            st.metric("⚡ Énergie cumulée", f"{m.get('energy_kwh_total', 0):.3f} kWh")
+            st.metric("💶 Coût cumulé", f"{m.get('cost_eur_total', 0):.4f} €")
             st.metric("🌡️ PUE", f"{m.get('pue_effective', 1.0):.2f}")
             st.caption(f"Cluster : `{snapshot.get('cluster_id', '?')}`")
             st.caption(f"Tick : `{snapshot.get('ts', '?')}`")
@@ -107,13 +117,13 @@ def render_sidebar(snapshot: dict[str, Any] | None) -> None:
             st.warning("⏳ En attente du simulateur…")
         st.divider()
         st.caption("API : http://localhost:8000")
+        st.caption(f"Refresh : {REFRESH_INTERVAL_S}s")
 
 
 # ---------------------------------------------------------------------------
 # Onglet 1 — Vue Cluster
 # ---------------------------------------------------------------------------
 
-@st.fragment(run_every=1)
 def tab_cluster(snapshot: dict[str, Any] | None) -> None:
     if not snapshot:
         st.info("⏳ Connexion au simulateur en cours…")
@@ -124,7 +134,6 @@ def tab_cluster(snapshot: dict[str, Any] | None) -> None:
         st.warning("Aucune machine dans le snapshot.")
         return
 
-    # --- KPIs ---
     m = snapshot.get("metrics", {})
     nb_on = sum(1 for v in machines.values() if v.get("status") == "on")
     t_max = max((v.get("temperature_c", 0) for v in machines.values()), default=0)
@@ -141,7 +150,6 @@ def tab_cluster(snapshot: dict[str, Any] | None) -> None:
 
     st.divider()
 
-    # --- Heatmap température ---
     ids = list(machines.keys())
     temps = [machines[i].get("temperature_c", 0) for i in ids]
     statuses = [machines[i].get("status", "?") for i in ids]
@@ -170,7 +178,6 @@ def tab_cluster(snapshot: dict[str, Any] | None) -> None:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- Table récapitulative ---
     st.subheader("📊 État des machines")
     rows = []
     for mid, mv in machines.items():
@@ -190,7 +197,6 @@ def tab_cluster(snapshot: dict[str, Any] | None) -> None:
 # Onglet 2 — Vue Machine
 # ---------------------------------------------------------------------------
 
-@st.fragment(run_every=1)
 def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     if not snapshot:
         st.info("⏳ En attente du snapshot…")
@@ -214,7 +220,6 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     fans = mv.get("fans", [])
     sensors = mv.get("sensors", [])
 
-    # --- Bandeau statut ---
     color = "red" if status == "degraded" else ("green" if status == "on" else "gray")
     st.markdown(
         f"<div style='padding:8px 16px; background:{color}20; "
@@ -226,73 +231,55 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
         unsafe_allow_html=True,
     )
 
-    # --- Métriques instantanées ---
     c1, c2, c3 = st.columns(3)
     c1.metric("🌡️ Temp CPU", f"{temp:.1f} °C")
     c2.metric("⚡ Énergie", f"{mv.get('energy_kwh_cumulated', 0):.3f} kWh")
     c3.metric("🌀 Fans", f"{len(fans)} ventilateur(s)")
 
-    # --- Buffer de température ---
     if selected not in st.session_state.temp_buffers:
         st.session_state.temp_buffers[selected] = collections.deque(maxlen=100)
     st.session_state.temp_buffers[selected].append(temp)
 
     buf = list(st.session_state.temp_buffers[selected])
     if len(buf) > 1:
-        st.line_chart(
-            {"temp_c": buf},
-            height=180,
-            use_container_width=True,
-        )
+        st.line_chart({"temp_c": buf}, height=180, use_container_width=True)
 
-    # --- Sondes ---
     if sensors:
         st.subheader("🌡️ Sondes thermiques")
         st.dataframe(
             [{"Sonde": s["sensor_id"], "Temp (°C)": f"{s['temp_c']:.1f}"} for s in sensors],
-            use_container_width=True,
-            hide_index=True,
+            use_container_width=True, hide_index=True,
         )
 
-    # --- Fans ---
     if fans:
         st.subheader("🌀 Ventilateurs")
         st.dataframe(
             [{"Idx": f["idx"], "RPM": f["rpm"], "Mode": f["mode"]} for f in fans],
-            use_container_width=True,
-            hide_index=True,
+            use_container_width=True, hide_index=True,
         )
 
-    # --- Pannes actives ---
     if faults:
         st.subheader("⚠️ Pannes actives")
         st.dataframe(
-            [{
-                "Type": f["type"],
-                "Restant (s)": f"{f['remaining_s']:.1f}",
-                "Magnitude": f"{f['magnitude']:.2f}",
-            } for f in faults],
-            use_container_width=True,
-            hide_index=True,
+            [{"Type": f["type"], "Restant (s)": f"{f['remaining_s']:.1f}",
+              "Magnitude": f"{f['magnitude']:.2f}"} for f in faults],
+            use_container_width=True, hide_index=True,
         )
 
     st.divider()
     st.subheader("🛠️ Commandes")
-
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown("**🔌 Alimentation**")
-        btn_on = st.button("▶️ Power ON", key="btn_on", disabled=(status == "on"))
-        btn_off = st.button("⏹️ Power OFF", key="btn_off", disabled=(status == "off"))
-        if btn_on:
+        if st.button("▶️ Power ON", key="btn_on", disabled=(status == "on")):
             res = api.power_machine(selected, "on")
             if "error" in res:
                 st.error(f"❌ {res['error']} (code {res.get('status_code')})")
             else:
                 log_event(f"Power ON → {selected}")
                 st.success("✅ Allumage demandé")
-        if btn_off:
+        if st.button("⏹️ Power OFF", key="btn_off", disabled=(status == "off")):
             res = api.power_machine(selected, "off")
             if "error" in res:
                 st.error(f"❌ {res['error']}")
@@ -308,7 +295,7 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
                                       step=1, key="fan_idx")
             rpm_val = st.slider("RPM cible", 0, 5000, 2000, step=100, key="fan_rpm")
             if st.button("✅ Appliquer RPM", key="btn_rpm"):
-                res = api.set_fan_speed(selected, int(fan_idx), rpm_val)
+                api.set_fan_speed(selected, int(fan_idx), rpm_val)
                 log_event(f"Fan {fan_idx} → {rpm_val} RPM sur {selected}")
                 st.success(f"✅ Fan {fan_idx} réglé à {rpm_val} RPM")
         else:
@@ -322,7 +309,7 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
                                        step=1, key="fan_idx2")
             mode = st.radio("Mode", ["auto", "manual"], key="fan_mode")
             if st.button("✅ Appliquer mode", key="btn_mode"):
-                res = api.set_fan_mode(selected, int(fan_idx2), mode)
+                api.set_fan_mode(selected, int(fan_idx2), mode)
                 log_event(f"Fan {fan_idx2} mode={mode} sur {selected}")
                 st.success(f"✅ Fan {fan_idx2} passé en mode {mode}")
 
@@ -337,11 +324,7 @@ def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     st.subheader("🎬 Scénario actif")
     col1, col2 = st.columns([2, 1])
     with col1:
-        scenario = st.selectbox(
-            "Choisir un scénario",
-            ["nominal", "stress"],
-            key="sel_scenario",
-        )
+        scenario = st.selectbox("Choisir un scénario", ["nominal", "stress"], key="sel_scenario")
     with col2:
         st.write("")
         if st.button("🔄 Changer de scénario", key="btn_scenario"):
@@ -380,7 +363,7 @@ def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
                     st.success(f"✅ Panne **{ftype}** injectée sur `{target}`")
         with col_b:
             if st.button("🧹 Effacer les pannes", key="btn_clear"):
-                res = api.clear_faults(target)
+                api.clear_faults(target)
                 log_event(f"Pannes effacées sur {target}")
                 st.success(f"✅ Pannes annulées pour `{target}`")
 
@@ -397,7 +380,6 @@ def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
 # Onglet 4 — Énergie
 # ---------------------------------------------------------------------------
 
-@st.fragment(run_every=5)
 def tab_energy(snapshot: dict[str, Any] | None) -> None:
     if not snapshot:
         st.info("⏳ En attente du snapshot…")
@@ -406,7 +388,6 @@ def tab_energy(snapshot: dict[str, Any] | None) -> None:
     machines = snapshot.get("machines", {})
     m = snapshot.get("metrics", {})
 
-    # --- KPIs énergie ---
     c1, c2, c3 = st.columns(3)
     kwh = m.get("energy_kwh_total", 0)
     cost = m.get("cost_eur_total", 0)
@@ -415,26 +396,17 @@ def tab_energy(snapshot: dict[str, Any] | None) -> None:
     c2.metric("💶 Coût cumulé", f"{cost:.4f} €")
     c3.metric("🌡️ PUE effectif", f"{pue:.2f}")
 
-    # --- Projection mensuelle ---
-    # Estimer le taux horaire à partir de l'énergie cumulée et du timestamp
-    # Heuristique simple : on affiche juste la projection proportionnelle
-    projection_mois = cost * 24 * 30  # approximation grossière
+    projection_mois = cost * 24 * 30
     st.info(f"📅 Projection mensuelle (estimation) : **{projection_mois:.2f} €**")
-
     st.divider()
 
-    # --- Bar chart par machine ---
     if machines:
         ids = list(machines.keys())
         energies = [machines[i].get("energy_kwh_cumulated", 0) for i in ids]
         statuses = [machines[i].get("status", "off") for i in ids]
-        colors = ["#27ae60" if s == "on" else ("#e74c3c" if s == "degraded" else "#95a5a6")
-                  for s in statuses]
 
         fig = px.bar(
-            x=ids,
-            y=energies,
-            color=statuses,
+            x=ids, y=energies, color=statuses,
             color_discrete_map={"on": "#27ae60", "degraded": "#e74c3c", "off": "#95a5a6"},
             labels={"x": "Machine", "y": "Énergie (kWh)", "color": "Statut"},
             title="Énergie cumulée par machine",
@@ -442,7 +414,6 @@ def tab_energy(snapshot: dict[str, Any] | None) -> None:
         fig.update_layout(height=350, margin=dict(l=10, r=10, t=50, b=30))
         st.plotly_chart(fig, use_container_width=True)
 
-    # --- Tableau détaillé ---
     st.subheader("📊 Détail par machine")
     rows = []
     for mid, mv in machines.items():
@@ -476,15 +447,15 @@ def main() -> None:
 
     with tab1:
         tab_cluster(snapshot)
-
     with tab2:
         tab_machine(snapshot, api)
-
     with tab3:
         tab_simulation(snapshot, api)
-
     with tab4:
         tab_energy(snapshot)
+
+    # Auto-refresh global toutes les REFRESH_INTERVAL_S secondes
+    _auto_refresh()
 
 
 if __name__ == "__main__":

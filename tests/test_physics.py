@@ -100,7 +100,7 @@ class TestComputeThermalStep:
         q_in = compute_heat_input(
             compute_load_power(0.8, IDLE_W, MAX_W, ALPHA), HEAT_RATIO
         )
-        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, K_COOL)
+        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, k_cool=K_COOL)
         for _ in range(500):
             T = compute_thermal_step(T, q_in, tau, C_TH, T_AMB, DT)
         assert T > T_AMB + 5.0, (
@@ -109,7 +109,7 @@ class TestComputeThermalStep:
 
     def test_temperature_higher_with_more_load(self):
         """Charge plus élevée → température plus haute après même durée."""
-        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, K_COOL)
+        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, k_cool=K_COOL)
 
         T_low = T_AMB
         q_low = compute_heat_input(compute_load_power(0.3, IDLE_W, MAX_W, ALPHA), HEAT_RATIO)
@@ -131,7 +131,7 @@ class TestComputeThermalStep:
         q_in = compute_heat_input(
             compute_load_power(0.5, IDLE_W, MAX_W, ALPHA), HEAT_RATIO
         )
-        tau = compute_tau(TAU_MAX, fan_rpm_mean=4000.0, K_COOL)
+        tau = compute_tau(TAU_MAX, fan_rpm_mean=4000.0, k_cool=K_COOL)
         for _ in range(500):
             T = compute_thermal_step(T, q_in, tau, C_TH, T_AMB, DT)
         assert T < 75.0, f"Température trop élevée avec fans : {T:.1f}°C"
@@ -140,7 +140,7 @@ class TestComputeThermalStep:
         """Sans charge, la température doit converger vers T_amb."""
         T = 80.0
         q_in = 0.0
-        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, K_COOL)
+        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, k_cool=K_COOL)
         for _ in range(3000):
             T = compute_thermal_step(T, q_in, tau, C_TH, T_AMB, DT)
         assert abs(T - T_AMB) < 5.0, f"T={T:.1f}°C ne converge pas vers T_amb={T_AMB}°C"

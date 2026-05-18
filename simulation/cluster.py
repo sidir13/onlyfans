@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from config.loader import get_machine_config
 from .machine import MachineSimulator, SensorConfig, ThermalConfig
 from .physics import compute_cost
 from .scenarios import FaultConfig, FaultScheduler, LoadProfileConfig, ScenarioEngine
@@ -89,73 +90,46 @@ class ClusterSimulator:
     # Construction des machines
     # ------------------------------------------------------------------
     def _build_machines(self) -> None:
+        """Instancie les MachineSimulator à partir des role_profiles.
+
+        Utilise get_machine_config() pour merger le profil de rôle avec
+        les surcharges individuelles de chaque machine, conformément à la
+        structure de base.yaml (cluster.role_profiles.{role}.thermal / .fans).
+        """
         cluster_cfg = self._cfg["cluster"]
-        thermal_defaults = cluster_cfg["thermal"]
-        fans_defaults = cluster_cfg["fans"]
         tick_rate_hz = float(self._cfg["simulation"]["tick_rate_hz"])
 
-        for m_cfg in cluster_cfg["machines"]:
-            machine_id = m_cfg["id"]
-            role = m_cfg.get("role", "worker")
+        for m_entry in cluster_cfg["machines"]:
+            machine_id = m_entry["id"]
+            role = m_entry.get("role", "worker")
+
+            # Merge role_profile + surcharges individuelles
+            m_cfg = get_machine_config(self._cfg, machine_id)
+
+            th = m_cfg["thermal"]
+            fans = m_cfg["fans"]
+            power = m_cfg["power"]
 
             thermal_cfg = ThermalConfig(
-                idle_w=float(m_cfg.get("thermal", {}).get("idle_w", thermal_defaults["idle_w"])),
-                max_w=float(m_cfg.get("thermal", {}).get("max_w", thermal_defaults["max_w"])),
-                alpha=float(
-                    m_cfg.get("thermal", {}).get("alpha", thermal_defaults.get("alpha", 1.5))
-                ),
-                heat_ratio=float(
-                    m_cfg.get("thermal", {}).get(
-                        "heat_ratio", thermal_defaults.get("heat_ratio", 0.9)
-                    )
-                ),
-                tau_max_s=float(
-                    m_cfg.get("thermal", {}).get("tau_max_s", thermal_defaults["tau_max_s"])
-                ),
-                k_cool=float(
-                    m_cfg.get("thermal", {}).get("k_cool", thermal_defaults["k_cool"])
-                ),
-                c_th_j_per_c=float(
-                    m_cfg.get("thermal", {}).get(
-                        "c_th_j_per_c", thermal_defaults["c_th_j_per_c"]
-                    )
-                ),
-                ambient_temp_c=float(
-                    m_cfg.get("thermal", {}).get(
-                        "ambient_temp_c", thermal_defaults["ambient_temp_c"]
-                    )
-                ),
-                t_shutdown_c=float(
-                    m_cfg.get("thermal", {}).get(
-                        "t_shutdown_c", thermal_defaults["t_shutdown_c"]
-                    )
-                ),
-                t_restart_c=float(
-                    m_cfg.get("thermal", {}).get(
-                        "t_restart_c", thermal_defaults["t_restart_c"]
-                    )
-                ),
-                recovery_delay_s=float(
-                    m_cfg.get("thermal", {}).get(
-                        "recovery_delay_s", thermal_defaults["recovery_delay_s"]
-                    )
-                ),
-                fan_gain_rpm_per_c=float(
-                    m_cfg.get("fans", {}).get(
-                        "gain_rpm_per_c", fans_defaults["gain_rpm_per_c"]
-                    )
-                ),
-                fan_max_rpm=int(
-                    m_cfg.get("fans", {}).get("max_rpm", fans_defaults["max_rpm"])
-                ),
-                fan_power_w=float(
-                    m_cfg.get("fans", {}).get("power_w", fans_defaults["power_w"])
-                ),
+                idle_w=float(power["idle_watts"]),
+                max_w=float(power["max_watts"]),
+                alpha=float(th.get("alpha_load_exponent", 1.5)),
+                heat_ratio=float(power.get("heat_ratio", 0.9)),
+                tau_max_s=float(th["tau_max_s"]),
+                k_cool=float(th["k_cool_rpm_factor"]),
+                c_th_j_per_c=float(th["thermal_capacity_j_per_c"]),
+                ambient_temp_c=float(th["ambient_temp_c"]),
+                t_shutdown_c=float(th["t_shutdown_c"]),
+                t_restart_c=float(th["t_restart_c"]),
+                recovery_delay_s=float(th.get("recovery_delay_s", 60.0)),
+                fan_gain_rpm_per_c=float(fans["auto_policy"]["gain_rpm_per_c"]),
+                fan_max_rpm=int(fans["max_rpm"]),
+                fan_power_w=float(fans["power_per_fan_w"]),
                 tick_rate_hz=tick_rate_hz,
             )
 
             sensor_configs: list[SensorConfig] = []
-            for s_cfg in cluster_cfg.get("sensors", []):
+            for s_cfg in m_cfg.get("temperature_sensors", []):
                 sensor_configs.append(
                     SensorConfig(
                         sensor_id=s_cfg["id"],
@@ -165,7 +139,7 @@ class ClusterSimulator:
                     )
                 )
 
-            fan_count = int(m_cfg.get("fans", {}).get("count", fans_defaults["count"]))
+            fan_count = int(fans.get("count", 2))
 
             machine = MachineSimulator(
                 machine_id=machine_id,

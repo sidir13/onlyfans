@@ -5,11 +5,25 @@ Lancer :
     python -m streamlit run dashboard/app.py
 
 Pré-requis :
-    L’API FastAPI doit tourner sur http://localhost:8000
+    L'API FastAPI doit tourner sur http://localhost:8000
     (MQTT_ENABLED=0 uvicorn api.main:app --reload)
 """
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# sys.path : garantit que la racine du projet est dans le path Python,
+# quel que soit le répertoire depuis lequel Streamlit est lancé.
+# ---------------------------------------------------------------------------
+import sys
+import os
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+# ---------------------------------------------------------------------------
+# Imports standard
+# ---------------------------------------------------------------------------
 import collections
 import time
 from typing import Any
@@ -66,14 +80,14 @@ def log_event(msg: str) -> None:
 # Auto-refresh (remplace @st.fragment pour Streamlit < 1.37)
 # ---------------------------------------------------------------------------
 
-REFRESH_INTERVAL_S = 2  # secondes entre deux reruns automatiques
+REFRESH_INTERVAL_S = 2
 
 def _auto_refresh() -> None:
     """Planifie un st.rerun() si l'intervalle est écoulé."""
     now = time.time()
     if now - st.session_state.last_refresh >= REFRESH_INTERVAL_S:
         st.session_state.last_refresh = now
-        time.sleep(0.05)  # petite pause pour éviter le busy-loop
+        time.sleep(0.05)
         st.rerun()
 
 
@@ -454,7 +468,6 @@ def main() -> None:
     with tab4:
         tab_energy(snapshot)
 
-    # Auto-refresh global toutes les REFRESH_INTERVAL_S secondes
     _auto_refresh()
 
 

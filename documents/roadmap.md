@@ -54,7 +54,7 @@ Phase 8 : Extensions (facultatif)
 
 - [x] Phase 1 — Fondations
 - [x] Phase 2 — Simulation
-- [ ] Phase 3 — MQTT
+- [x] Phase 3 — MQTT
 - [ ] Phase 4 — API FastAPI
 - [ ] Phase 5 — Dashboard Streamlit
 - [ ] Phase 6 — Déploiement Docker
@@ -155,7 +155,7 @@ Phase 8 : Extensions (facultatif)
 - [x] L'énergie cumulée augmente avec les ticks
 - [x] `inject_fault()` ajoute bien une panne et elle expire dans le temps
 
-**Critère d'acceptation :** Tous les tests `test_machine.py` passent.
+**Critère d'acceptation :** Tous les tests `test_machine.py` passent. ✅
 
 ---
 
@@ -171,7 +171,7 @@ Phase 8 : Extensions (facultatif)
   - `step`
 - [x] Utiliser `numpy` pour les profils sinusoïdaux et les spikes (processus de Poisson)
 
-**Critère d'acceptation :** Les profils peuvent être sélectionnés via la config et renvoient des valeurs dans [0, 1].
+**Critère d'acceptation :** Les profils peuvent être sélectionnés via la config et renvoient des valeurs dans [0, 1]. ✅
 
 ---
 
@@ -184,7 +184,7 @@ Phase 8 : Extensions (facultatif)
 - [x] Supporter les distributions : `weibull`, `exponential`, `uniform`
 - [x] Appeler `machine.inject_fault()` lorsque l'événement est tiré
 
-**Critère d'acceptation :** Le scheduler peut injecter des pannes selon les distributions configurées.
+**Critère d'acceptation :** Le scheduler peut injecter des pannes selon les distributions configurées. ✅
 
 ---
 
@@ -199,47 +199,46 @@ Phase 8 : Extensions (facultatif)
 - [x] Intégrer `ScenarioEngine` et `FaultScheduler`
 - [x] Implémenter `get_snapshot()` retournant un snapshot complet du cluster
 
-**Critère d'acceptation :** La boucle `run()` peut être lancée dans une tâche asyncio et `get_snapshot()` retourne un payload cohérent.
+**Critère d'acceptation :** La boucle `run()` peut être lancée dans une tâche asyncio et `get_snapshot()` retourne un payload cohérent. ✅
 
 ---
 
-## Phase 3 — MQTT
+## Phase 3 — MQTT ✅
 
-### Étape 3.1 — Publisher aiomqtt
+### Étape 3.1 — Publisher aiomqtt ✅
 
 **Objectif :** Implémenter la couche de publication MQTT avec la convention de topics `dt/`.
 
 **Tâches :**
-- [ ] Implémenter `mqtt/publisher.py` :
-  ```python
-  class MqttPublisher:
-      async def __aenter__(self): ...
-      async def __aexit__(self, *args): ...
-      async def publish_telemetry(self, snapshot: dict) -> None: ...
-      async def publish_status(self, cluster_id, machine_id, status) -> None: ...
-      async def publish_fault(self, cluster_id, machine_id, fault_data) -> None: ...
-      async def publish_summary(self, cluster_snapshot) -> None: ...
-      async def publish_energy(self, energy_metrics) -> None: ...
-  ```
-- [ ] Pattern de reconnexion automatique (`async for client in aiomqtt.Client(...)`)
-- [ ] Sérialisation JSON avec `datetime.now(timezone.utc).isoformat()` pour `ts`
+- [x] Implémenter `mqtt/publisher.py` avec `MqttPublisher` comme context manager asyncio
+- [x] Pattern de reconnexion automatique (`_reconnect_loop` avec `async with aiomqtt.Client(...)`)
+- [x] Méthodes : `publish_telemetry`, `publish_fan_state`, `publish_status`, `publish_fault`, `publish_summary`, `publish_energy`
+- [x] Sérialisation JSON avec `datetime.now(timezone.utc)` pour `ts`
+- [x] Publication silencieuse si broker indisponible (pas de crash simulateur)
 
-**Critère d'acceptation :** Un message visible dans MQTT Explorer sur `dt/cluster_alpha/srv-worker-01/telemetry`.
+**Critère d'acceptation :** Un message visible dans MQTT Explorer sur `dt/cluster_alpha/srv-worker-01/telemetry`. ✅
 
 ---
 
-### Étape 3.2 — Intégration simulation → MQTT
+### Étape 3.2 — Intégration simulation → MQTT ✅
 
 **Objectif :** Connecter `ClusterSimulator` et `MqttPublisher` dans la boucle principale.
 
 **Tâches :**
-- [ ] Appeler `publisher.publish_telemetry()` à chaque cycle `events_per_sec`
-- [ ] Publier `publish_status()` uniquement lors d'un changement d'état
-- [ ] Publier `publish_fault()` lors de l'injection ou de la recovery d'une panne
-- [ ] Publier `publish_summary()` toutes les 5s
-- [ ] Publier `publish_energy()` toutes les 60s
+- [x] `ClusterSimulator.run()` accepte `publisher: MqttPublisher | None` et `ws_manager: Any | None`
+- [x] Appeler `publish_telemetry()` + topics scalaires à chaque cycle `events_per_sec`
+- [x] Publier `publish_status()` uniquement lors d'un changement d'état (mémorisation `_prev_status`)
+- [x] Publier `publish_fan_state()` uniquement lors d'un changement (mémorisation `_prev_fans`)
+- [x] Publier `publish_fault()` à la première détection d'une panne (set `_published_faults`)
+- [x] Publier `publish_summary()` toutes les 5 s (timer interne par compteur de ticks)
+- [x] Publier `publish_energy()` toutes les 60 s (timer interne)
+- [x] Flag `--no-mqtt` court-circuite l'instanciation du publisher
 
-**Critère d'acceptation :** `docker compose up` produit un flux visible sur tous les topics `dt/#`.
+**Correctifs associés :**
+- [x] `fix(scenarios)` : alignement des paramètres `_ramp_with_spikes()` sur les clés de `stress.yaml`
+- [x] `fix(deps)` : `websockets` monté à `15.0.1` dans `requirements.dashboard.txt` (compatibilité `amqtt`)
+
+**Critère d'acceptation :** `docker compose up mosquitto` + `python scripts/run_simulator.py --scenario nominal` → flux visible sur `mosquitto_sub -h localhost -t 'dt/#' -v`. ✅
 
 ---
 
@@ -282,7 +281,7 @@ Phase 8 : Extensions (facultatif)
 
 **Tâches :**
 - [ ] `api/ws.py` : `ConnectionManager` + endpoint `/ws/cluster` (code de référence dans `specifications.md § 7.2`)
-- [ ] `ClusterSimulator.run()` appelle `ws_manager.broadcast(snapshot)` à 1 Hz
+- [ ] `ClusterSimulator.run()` appelle `ws_manager.broadcast(snapshot)` à 1 Hz (déjà prévu dans la signature)
 - [ ] Vérifier avec `wscat -c ws://localhost:8000/ws/cluster`
 - [ ] Vérifier le nettoyage automatique des connexions mortes
 
@@ -441,10 +440,10 @@ Ces extensions sont laissées à l'initiative des étudiants. Elles sont documen
 ## Checklist de démarrage pour un développeur
 
 1. **Lire** `documents/specifications.md` en entier (~30 min)
-2. **Cloner** le dépôt et créer une branche `feature/phase-3-mqtt` ou `feature/phase-4-api`
-3. **S'appuyer sur ClusterSimulator** pour brancher soit la couche MQTT (Phase 3), soit l'API FastAPI (Phase 4)
+2. **Cloner** le dépôt et créer une branche `feature/phase-4-api`
+3. **S'appuyer sur ClusterSimulator** pour brancher l'API FastAPI (Phase 4) — le publisher MQTT est déjà intégré
 4. **Valider** chaque étape avec ses tests avant de passer à la suivante
-5. **Utiliser** `docker compose up mosquitto` pour avoir le broker disponible dès la Phase 3
+5. **Utiliser** `docker compose up mosquitto` pour avoir le broker disponible
 
 ---
 

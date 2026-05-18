@@ -1,0 +1,78 @@
+{
+  "title": "Jumeaux Chauds — Cluster Thermique",
+  "uid": "jumeaux-chauds-v1",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "tags": ["iot", "thermique", "mqtt"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Température CPU par machine",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "postgres" },
+          "rawSql": "SELECT bucket AS time, machine_id AS metric, temp_avg_c AS value FROM telemetry_1min WHERE $__timeFilter(bucket) ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Puissance totale du cluster (W)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "datasource": { "type": "postgres" },
+          "rawSql": "SELECT bucket AS time, 'cluster' AS metric, SUM(power_avg_w) AS value FROM telemetry_1min WHERE $__timeFilter(bucket) GROUP BY bucket ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "watt" } }
+    },
+    {
+      "id": 3,
+      "title": "Machines actives",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 7 },
+      "targets": [
+        {
+          "datasource": { "type": "postgres" },
+          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT machine_id) AS value FROM telemetry WHERE ts > NOW() - INTERVAL '1 minute' AND status = 'on'",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" } } }
+    },
+    {
+      "id": 4,
+      "title": "Pannes récentes",
+      "type": "table",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 7 },
+      "targets": [
+        {
+          "datasource": { "type": "postgres" },
+          "rawSql": "SELECT ts, machine_id, payload->>'type' AS fault_type FROM events WHERE event_type = 'fault' AND $__timeFilter(ts) ORDER BY ts DESC LIMIT 20",
+          "format": "table"
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # 🌡️ Jumeaux Chauds — Digital Twin de Cluster IoT
 
-> Simulateur de jumeaux numériques thermiques pour un cluster de serveurs, avec publication MQTT temps réel, API FastAPI et dashboard Streamlit.
+> Simulateur de jumeaux numériques thermiques pour un cluster de serveurs, avec publication MQTT temps réel, API FastAPI, dashboard Streamlit et stack de stockage TimescaleDB + Grafana.
 
 **Auteur :** Tristan Vanrullen — La Plateforme, Marseille — 2026
 
@@ -14,14 +14,14 @@
 | 2 — Simulation (MachineSimulator, ClusterSimulator) | ✅ Complète |
 | 3 — MQTT (publisher aiomqtt, intégration cluster) | ✅ Complète |
 | 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
-| 5 — Dashboard Streamlit | 🔜 À venir |
-| 6 — Déploiement Docker | 🔜 À venir |
+| 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
+| 6 — Déploiement Docker (Compose noyau + profil storage) | 🔄 En cours |
 | 7 — Tests d'intégration | 🔜 À venir |
 | 8 — Extensions pédagogiques | 🔜 Facultatif |
 
 ---
 
-## Fonctionnement rapide
+## Démarrage rapide
 
 ### Prérequis
 
@@ -31,36 +31,70 @@ conda activate jumeaux-chauds
 pip install -r requirements.txt
 ```
 
-### Lancer la simulation seule (sans MQTT ni API)
+### Développement local (sans Docker)
 
 ```bash
+# Broker MQTT seul
+docker compose up mosquitto -d
+
+# Simulation CLI
 python scripts/run_simulator.py --scenario nominal
 python scripts/run_simulator.py --scenario stress --duration 2m
-```
 
-### Lancer avec le broker MQTT
-
-```bash
-docker compose up mosquitto -d
-mosquitto_sub -h localhost -t 'dt/#' -v &
-python scripts/run_simulator.py --scenario nominal
-```
-
-### Lancer l’API FastAPI
-
-```bash
-# Sans MQTT
-set MQTT_ENABLED=0  # Windows
-export MQTT_ENABLED=0  # Linux/macOS
+# API FastAPI
+export MQTT_ENABLED=0   # Linux/macOS
+set MQTT_ENABLED=0      # Windows
 uvicorn api.main:app --reload --port 8000
 
-# Avec MQTT (broker requis)
-docker compose up mosquitto -d
-uvicorn api.main:app --reload --port 8000
+# Dashboard Streamlit
+streamlit run dashboard/app.py
 ```
 
-Docs interactives : **http://localhost:8000/docs**  
-WebSocket cluster : `wscat -c ws://localhost:8000/ws/cluster`
+Docs API : **http://localhost:8000/docs**  
+Dashboard : **http://localhost:8501**  
+WebSocket : `wscat -c ws://localhost:8000/ws/cluster`
+
+---
+
+## Docker Compose — Stack complète (Phase 6)
+
+### Noyau (simulateur + broker + dashboard)
+
+```bash
+docker compose up -d
+```
+
+Services démarrés :
+- `mosquitto` — broker MQTT sur le port 1883
+- `iot-twin` — simulateur + API FastAPI sur le port 8000
+- `dashboard` — Streamlit sur le port 8501
+
+### Profil storage (TimescaleDB + consumer + Grafana)
+
+```bash
+docker compose --profile storage up -d
+```
+
+Services supplémentaires :
+- `timescaledb` — PostgreSQL + extension TimescaleDB sur le port 5432
+- `mqtt-consumer` — abonné MQTT → écrit dans TimescaleDB
+- `grafana` — dashboards sur le port 3000 (admin / admin)
+
+### Variables d'environnement utiles
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `SCENARIO` | `nominal` | Scénario de charge |
+| `CLUSTER_ID` | `cluster_alpha` | Identifiant du cluster |
+| `MQTT_ENABLED` | `1` | Désactiver MQTT (`0`) |
+| `POSTGRES_PASSWORD` | `jumeaux` | Mot de passe TimescaleDB |
+
+### Arrêt et nettoyage
+
+```bash
+docker compose down          # arrêt noyau
+docker compose --profile storage down -v   # arrêt + suppression volumes
+```
 
 ---
 
@@ -70,10 +104,12 @@ WebSocket cluster : `wscat -c ws://localhost:8000/ws/cluster`
 simulation/      Modèle physique thermique, MachineSimulator, ClusterSimulator
 mqtt/            MqttPublisher aiomqtt (Phase 3 ✅)
 api/             FastAPI lifespan + endpoints REST + WebSocket (Phase 4 ✅)
-dashboard/       Streamlit temps réel (Phase 5)
-consumer/        MQTT → TimescaleDB (Phase 6, profil storage)
+dashboard/       Streamlit temps réel (Phase 5 ✅)
+consumer/        MQTT → TimescaleDB (Phase 6 🔄)
 config/          YAML hiérarchique OmegaConf (base + scénarios)
 tests/           pytest + pytest-asyncio
+grafana/         Provisioning datasource + dashboard (Phase 6 🔄)
+mosquitto/       Configuration broker MQTT
 ```
 
 Voir [`documents/specifications.md`](documents/specifications.md) pour le détail technique complet  
@@ -101,7 +137,7 @@ et [`documents/roadmap.md`](documents/roadmap.md) pour le suivi d'avancement.
 
 ---
 
-## Topics MQTT publiés (Phase 3)
+## Topics MQTT publiés (Phase 3 ✅)
 
 | Topic | QoS | Fréquence |
 |---|---|---|
@@ -136,20 +172,37 @@ jumeaux-chauds/
 ├── mqtt/
 │   └── publisher.py          ← Phase 3 ✅
 ├── api/                      ← Phase 4 ✅
-│   ├── main.py               (lifespan, CORS, routers)
-│   ├── deps.py               (injection de dépendances)
-│   ├── models.py             (schémas Pydantic v2)
-│   ├── ws.py                 (ConnectionManager + /ws/cluster)
+│   ├── main.py
+│   ├── deps.py
+│   ├── models.py
+│   ├── ws.py
 │   └── routes/
 │       ├── machines.py
 │       ├── cluster.py
 │       └── simulation.py
-├── dashboard/                ← Phase 5 (à venir)
-├── consumer/                 ← Phase 6 (à venir)
+├── dashboard/                ← Phase 5 ✅
+│   ├── app.py
+│   ├── ws_client.py
+│   └── api_client.py
+├── consumer/                 ← Phase 6 🔄
+│   ├── mqtt_to_timescale.py
+│   └── schema.sql
+├── grafana/                  ← Phase 6 🔄
+│   └── provisioning/
+│       ├── datasources/
+│       │   └── timescale.yaml
+│       └── dashboards/
+│           ├── dashboard.yaml
+│           └── jumeaux-chauds.json
+├── mosquitto/config/
+│   └── mosquitto.conf
 ├── tests/
 ├── scripts/
 │   └── run_simulator.py
-├── mosquitto/config/
+├── Dockerfile
+├── Dockerfile.dashboard
+├── Dockerfile.consumer
+├── docker-compose.yml
 ├── documents/
 │   ├── specifications.md
 │   └── roadmap.md

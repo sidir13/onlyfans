@@ -1,1 +1,1 @@
-"""Package consumer — MQTT vers TimescaleDB (optionnel, profil storage)."""
+"""Package consumer — MQTT to TimescaleDB."""

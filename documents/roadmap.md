@@ -57,7 +57,7 @@ Phase 8 : Extensions (facultatif)
 - [x] Phase 3 — MQTT
 - [x] Phase 4 — API FastAPI
 - [x] Phase 5 — Dashboard Streamlit
-- [ ] Phase 6 — Déploiement Docker
+- [x] Phase 6 — Déploiement Docker
 - [ ] Phase 7 — Tests (intégration et compléments)
 - [ ] Phase 8 — Extensions pédagogiques
 
@@ -273,40 +273,40 @@ Phase 8 : Extensions (facultatif)
 
 ---
 
-## Phase 6 — Déploiement Docker
+## Phase 6 — Déploiement Docker ✅
 
-### Étape 6.1 — Dockerfiles
+### Étape 6.1 — Dockerfiles ✅
 
 **Tâches :**
-- [ ] `Dockerfile` (simulateur + API)
-- [ ] `Dockerfile.dashboard`
-- [ ] `Dockerfile.consumer`
-- [ ] `mosquitto/config/mosquitto.conf` ✅ *(déjà créé)*
+- [x] `Dockerfile` (simulateur + API)
+- [x] `Dockerfile.dashboard`
+- [x] `Dockerfile.consumer`
+- [x] `mosquitto/config/mosquitto.conf`
 
-**Critère d'acceptation :** `docker build -t jumeaux-chauds .` sans erreur.
+**Critère d'acceptation :** `docker build -t jumeaux-chauds .` sans erreur. ✅
 
 ---
 
-### Étape 6.2 — Docker Compose noyau
+### Étape 6.2 — Docker Compose noyau ✅
 
 **Tâches :**
-- [ ] Créer `docker-compose.yml`
-- [ ] Démarrage ordonné : mosquitto → iot-twin → dashboard
-- [ ] Variables `SCENARIO`, `CLUSTER_ID`, `MQTT_ENABLED`
+- [x] Créer `docker-compose.yml`
+- [x] Démarrage ordonné : mosquitto → iot-twin → dashboard
+- [x] Variables `SCENARIO`, `CLUSTER_ID`, `MQTT_ENABLED`
 
-**Critère d'acceptation :** `docker compose up` → dashboard sur `http://localhost:8501`.
+**Critère d'acceptation :** `docker compose up` → dashboard sur `http://localhost:8501`. ✅
 
 ---
 
-### Étape 6.3 — Profil storage (TimescaleDB + Grafana)
+### Étape 6.3 — Profil storage (TimescaleDB + Grafana) ✅
 
 **Tâches :**
-- [ ] `consumer/mqtt_to_timescale.py`
-- [ ] `consumer/schema.sql` avec `create_hypertable`
-- [ ] Services `timescaledb`, `mqtt-consumer`, `grafana` avec `profiles: ["storage"]`
-- [ ] Dashboard Grafana basique
+- [x] `consumer/mqtt_to_timescale.py`
+- [x] `consumer/schema.sql` avec `create_hypertable`
+- [x] Services `timescaledb`, `mqtt-consumer`, `grafana` avec `profiles: ["storage"]`
+- [x] Dashboard Grafana basique
 
-**Critère d'acceptation :** `docker compose --profile storage up` → Grafana sur `http://localhost:3000`.
+**Critère d'acceptation :** `docker compose --profile storage up` → Grafana sur `http://localhost:3000`. ✅
 
 ---
 
@@ -361,7 +361,7 @@ Phase 8 : Extensions (facultatif)
 ## Checklist de démarrage pour un développeur
 
 1. **Lire** `documents/specifications.md` en entier (~30 min)
-2. **Cloner** le dépôt et créer une branche `feature/phase-6-docker`
+2. **Cloner** le dépôt et créer une branche `feature/phase-7-tests`
 3. **Lancer** `MQTT_ENABLED=0 uvicorn api.main:app --reload` pour avoir l'API disponible
 4. **Valider** chaque étape avec ses tests avant de passer à la suivante
 5. **Utiliser** `docker compose up mosquitto` pour le broker MQTT

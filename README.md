@@ -21,7 +21,7 @@ Il est conçu comme support pédagogique pour des étudiants en data engineering
 ## Statut du projet
 
 - ✅ **Phase 1 — Fondations** : structure du projet, configuration YAML hiérarchique, modèle physique thermique, socle de tests unitaires (config + physique).
-- 🚧 **Phase 2 — Simulation** : implémentation de `MachineSimulator`, `ScenarioEngine`, `FaultScheduler` et `ClusterSimulator` à partir des spécifications.
+- ✅ **Phase 2 — Simulation** : `MachineSimulator`, `ScenarioEngine`, `FaultScheduler` et `ClusterSimulator` implémentés et testés.
 - ⏳ **Phases 3 à 6** : couche MQTT, API FastAPI, dashboard Streamlit et stack Docker complète encore à implémenter.
 
 ---

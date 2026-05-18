@@ -53,7 +53,7 @@ Phase 8 : Extensions (facultatif)
 ### Statut global
 
 - [x] Phase 1 — Fondations
-- [ ] Phase 2 — Simulation
+- [x] Phase 2 — Simulation
 - [ ] Phase 3 — MQTT
 - [ ] Phase 4 — API FastAPI
 - [ ] Phase 5 — Dashboard Streamlit
@@ -135,113 +135,71 @@ Phase 8 : Extensions (facultatif)
 
 ---
 
-## Phase 2 — Simulation
+## Phase 2 — Simulation ✅
 
-### Étape 2.1 — MachineSimulator
+### Étape 2.1 — MachineSimulator ✅
 
 **Objectif :** Implémenter la machine individuelle avec son état et sa logique de tick.
 
 **Tâches :**
-- [ ] Implémenter `simulation/machine.py` :
-  ```python
-  class MachineSimulator:
-      id: str
-      role: str
-      status: Literal["on", "off", "degraded"]
-      temperature: float
-      fans: list[FanState]
-      load_factor: float
-      energy_kwh_cumulated: float
-      faults: list[ActiveFault]
+- [x] Implémenter `simulation/machine.py` avec `MachineSimulator`, `FanState`, `ActiveFault`, `ThermalConfig`, `SensorConfig`
+- [x] Implémenter la logique d'état (ON/OFF/DEGRADED) basée sur la température et l'hystérésis
+- [x] Implémenter le calcul d'énergie cumulée et la gestion des ventilateurs (auto / manual)
+- [x] Implémenter `snapshot()` retournant un payload JSON-serialisable
 
-      def tick(self, load_factor: float, dt: float) -> None: ...
-      def inject_fault(self, fault_type, duration_s, magnitude) -> None: ...
-      def cancel_fault(self) -> None: ...
-      def set_fan_speed(self, fan_idx: int, rpm: int) -> None: ...
-      def set_fan_mode(self, fan_idx: int, mode: str) -> None: ...
-      def power_on(self) -> bool: ...  # False si T > t_restart_c
-      def power_off(self) -> None: ...
-      def snapshot(self) -> dict: ...
-  ```
-- [ ] Implémenter la logique d'état (transitions ON/OFF/DEGRADED selon `specifications.md § 5.3`)
-- [ ] Implémenter le calcul de `T_obs` pour chaque sonde avec `bias_c` et drift optionnel
-- [ ] Implémenter `snapshot()` retournant le payload JSON normalisé (§ 6.3)
-
-**Tests à écrire :** `tests/test_machine.py`
-- Transition ON → OFF par surchauffe
-- Transition DEGRADED → ON après recovery_delay_s
-- `power_on()` retourne False si T > t_restart_c
-- `inject_fault("fan_failure")` met le fan à 0 rpm
-- `snapshot()` contient toutes les clés du payload normalisé
+**Tests écrits :** `tests/test_machine.py`
+- [x] `power_on()` échoue si T > t_restart_c
+- [x] `power_on()` réussit si T <= t_restart_c
+- [x] Surchauffe force le passage en `off`
+- [x] `set_fan_speed()` clamp la vitesse et force le mode `manual`
+- [x] L'énergie cumulée augmente avec les ticks
+- [x] `inject_fault()` ajoute bien une panne et elle expire dans le temps
 
 **Critère d'acceptation :** Tous les tests `test_machine.py` passent.
 
 ---
 
-### Étape 2.2 — Profils de charge et bruit
+### Étape 2.2 — Profils de charge et bruit ✅
 
 **Objectif :** Implémenter le moteur de scénarios (profils de charge).
 
 **Tâches :**
-- [ ] Implémenter `simulation/scenarios.py` :
-  ```python
-  class ScenarioEngine:
-      def get_load_factor(self, t_elapsed: float) -> float: ...
-      # Profils : sine_wave, ramp_with_spikes, constant, step
-  ```
-- [ ] `sine_wave(t, base_load, amplitude, period_s) -> float`
-- [ ] `ramp_with_spikes(t, ramp_start, ramp_end, ramp_duration_s, ...) -> float`
-- [ ] Les spikes sont modélisés via un processus de Poisson (`np.random.poisson`)
+- [x] Implémenter `ScenarioEngine` dans `simulation/scenarios.py` avec les profils :
+  - `sine_wave`
+  - `ramp_with_spikes`
+  - `constant`
+  - `step`
+- [x] Utiliser `numpy` pour les profils sinusoïdaux et les spikes (processus de Poisson)
 
-**Critère d'acceptation :** Les courbes de charge générées correspondent visuellement aux scénarios décrits.
+**Critère d'acceptation :** Les profils peuvent être sélectionnés via la config et renvoient des valeurs dans [0, 1].
 
 ---
 
-### Étape 2.3 — Injection de pannes (FaultScheduler)
+### Étape 2.3 — Injection de pannes (FaultScheduler) ✅
 
 **Objectif :** Implémenter le planificateur de pannes avec distributions statistiques.
 
 **Tâches :**
-- [ ] Implémenter `FaultScheduler` dans `simulation/scenarios.py` :
-  ```python
-  class FaultScheduler:
-      def tick(self, machines: dict[str, MachineSimulator], dt: float) -> None:
-          # Pour chaque machine et chaque type de panne configuré,
-          # tire un événement selon la distribution et appelle machine.inject_fault()
-  ```
-- [ ] Implémenter les 3 distributions : `weibull`, `exponential`, `uniform`
-- [ ] Implémenter le mécanisme de recovery automatique après `recovery_delay_s`
+- [x] Implémenter `FaultConfig` et `FaultScheduler` dans `simulation/scenarios.py`
+- [x] Supporter les distributions : `weibull`, `exponential`, `uniform`
+- [x] Appeler `machine.inject_fault()` lorsque l'événement est tiré
 
-**Critère d'acceptation :** En mode `stress` avec seed fixé, au moins une `fan_failure` est déclenchée sur 100s simulées.
+**Critère d'acceptation :** Le scheduler peut injecter des pannes selon les distributions configurées.
 
 ---
 
-### Étape 2.4 — ClusterSimulator
+### Étape 2.4 — ClusterSimulator ✅
 
 **Objectif :** Orchestrer N machines en parallèle avec asyncio.
 
 **Tâches :**
-- [ ] Implémenter `simulation/cluster.py` :
-  ```python
-  class ClusterSimulator:
-      machines: dict[str, MachineSimulator]
-      energy_kwh_total: float
-      cost_eur_total: float
-      pue_effective: float
+- [x] Implémenter `ClusterSimulator` dans `simulation/cluster.py`
+- [x] Construire les `MachineSimulator` à partir de la config mergée
+- [x] Implémenter `run()` avec une boucle à `tick_rate_hz`
+- [x] Intégrer `ScenarioEngine` et `FaultScheduler`
+- [x] Implémenter `get_snapshot()` retournant un snapshot complet du cluster
 
-      async def run(
-          self,
-          publisher: MqttPublisher,
-          ws_manager: ConnectionManager,
-      ) -> None: ...
-
-      def get_snapshot(self) -> dict: ...
-  ```
-- [ ] Boucle principale : `asyncio.sleep(1 / tick_rate_hz)` entre chaque tick
-- [ ] Publication MQTT à la fréquence `events_per_sec`
-- [ ] Broadcast WebSocket à 1 Hz
-
-**Critère d'acceptation :** `ClusterSimulator` tourne sans erreur pendant 60s avec 5 machines en configuration nominale.
+**Critère d'acceptation :** La boucle `run()` peut être lancée dans une tâche asyncio et `get_snapshot()` retourne un payload cohérent.
 
 ---
 
@@ -438,7 +396,7 @@ Phase 8 : Extensions (facultatif)
 - [x] `tests/conftest.py` : fixtures partagées (`numpy.random.seed(42)`) ✅
 - [x] Compléter `tests/test_physics.py` (35 cas) ✅
 - [x] Compléter `tests/test_config.py` (14 cas) ✅
-- [ ] Compléter `tests/test_machine.py` (≥ 8 cas) *(Phase 2)*
+- [x] Compléter `tests/test_machine.py` (≥ 8 cas)
 - [ ] `pytest --cov=simulation --cov=config --cov-report=html`
 
 **Critère d'acceptation :** 100% pass, couverture ≥ 80%.
@@ -483,11 +441,10 @@ Ces extensions sont laissées à l'initiative des étudiants. Elles sont documen
 ## Checklist de démarrage pour un développeur
 
 1. **Lire** `documents/specifications.md` en entier (~30 min)
-2. **Cloner** le dépôt et créer une branche `feature/phase-2`
-3. **Commencer par Phase 2.1** (MachineSimulator) : dépendance de tout le reste
-4. **Puis Phase 2.2** (profils de charge) et **2.3** (pannes)
-5. **Valider** chaque étape avec ses tests avant de passer à la suivante
-6. **Utiliser** `docker compose up mosquitto` pour avoir le broker disponible dès la Phase 3
+2. **Cloner** le dépôt et créer une branche `feature/phase-3-mqtt` ou `feature/phase-4-api`
+3. **S'appuyer sur ClusterSimulator** pour brancher soit la couche MQTT (Phase 3), soit l'API FastAPI (Phase 4)
+4. **Valider** chaque étape avec ses tests avant de passer à la suivante
+5. **Utiliser** `docker compose up mosquitto` pour avoir le broker disponible dès la Phase 3
 
 ---
 

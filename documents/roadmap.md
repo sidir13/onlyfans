@@ -2,7 +2,7 @@
 
 > **Auteur :** Tristan Vanrullen  
 > **Date :** Mai 2026  
-> **Version :** 1.0.0
+> **Version :** 1.1.0
 
 Ce document décompose les spécifications techniques en étapes de développement concrètes et ordonnées. Chaque étape est une unité de travail livrable, testable et mergeable de façon indépendante.
 
@@ -10,7 +10,7 @@ Ce document décompose les spécifications techniques en étapes de développeme
 
 ## Vue d'ensemble
 
-```
+```text
 Phase 1 : Fondations
   ├── Étape 1.1 : Bootstrap du projet
   ├── Étape 1.2 : Système de configuration YAML
@@ -36,7 +36,7 @@ Phase 5 : Dashboard Streamlit
   ├── Étape 5.1 : Client WebSocket
   ├── Étape 5.2 : Vue Cluster
   ├── Étape 5.3 : Vue Machine + commandes
-  └── Étape 5.4 : Vue Énergie
+  └── Étape 5.4 : Vue Simulation et Énergie
 
 Phase 6 : Déploiement Docker
   ├── Étape 6.1 : Dockerfiles
@@ -44,7 +44,7 @@ Phase 6 : Déploiement Docker
   └── Étape 6.3 : Profil storage (TimescaleDB + Grafana)
 
 Phase 7 : Tests
-  ├── Étape 7.1 : Tests unitaires
+  ├── Étape 7.1 : Couverture et tests unitaires consolidés
   └── Étape 7.2 : Tests d'intégration
 
 Phase 8 : Extensions (facultatif)
@@ -60,6 +60,24 @@ Phase 8 : Extensions (facultatif)
 - [x] Phase 6 — Déploiement Docker
 - [ ] Phase 7 — Tests (intégration et compléments)
 - [ ] Phase 8 — Extensions pédagogiques
+
+---
+
+## Prochaine priorité recommandée
+
+La prochaine étape de développement recommandée est **la Phase 7 — Tests**.
+
+### Objectifs immédiats
+1. écrire les tests API FastAPI ;
+2. valider le flux WebSocket `/ws/cluster` ;
+3. tester la publication MQTT de bout en bout ;
+4. tester l'ingestion MQTT → TimescaleDB ;
+5. mesurer la couverture de code et corriger les zones non testées.
+
+### Pourquoi maintenant ?
+- les phases fonctionnelles 1 à 6 sont déjà en place ;
+- le projet expose plusieurs interfaces (REST, WebSocket, MQTT, dashboard, TSDB) ;
+- la priorité n'est plus d'ajouter des briques, mais de **stabiliser l'existant** avant d'étendre le périmètre.
 
 ---
 
@@ -89,7 +107,7 @@ Phase 8 : Extensions (facultatif)
 - [x] Créer `config/scenarios/nominal.yaml` (sine_wave, pas de pannes)
 - [x] Créer `config/scenarios/stress.yaml` (ramp_with_spikes, pannes Weibull/exp/uniforme)
 - [x] Implémenter `config/loader.py` : `load_config()` (merge 3 niveaux + ENV) et `get_machine_config()` (héritage rôle → machine)
-- [x] Vérifier que la surcharge individuelle de machine (ex: `t_shutdown_c: 92.0` sur `srv-master-02`) fonctionne
+- [x] Vérifier que la surcharge individuelle de machine fonctionne
 - [x] Implémenter `simulation/duration.py` : `parse_duration("1h30m") -> 5400.0`
 
 **Critère d'acceptation :** Tous les tests `test_config.py` passent. ✅
@@ -232,7 +250,7 @@ Phase 8 : Extensions (facultatif)
 
 **Tâches :**
 - [x] Implémenter `dashboard/ws_client.py`
-- [x] Implémenter `dashboard/api_client.py` avec `httpx.AsyncClient`
+- [x] Implémenter `dashboard/api_client.py`
 - [x] `@st.cache_resource` pour instancier `ClusterWSClient` une seule fois
 - [x] Reconnexion automatique si l'API redémarre
 
@@ -245,7 +263,7 @@ Phase 8 : Extensions (facultatif)
 **Tâches :**
 - [x] 4 métriques : machines ON, T_max, W_total, coût €/h
 - [x] Heatmap Plotly : une cellule par machine, couleur = `temp_cpu`
-- [x] Auto-refresh toutes les 2 s via `st.rerun()` (compatible Streamlit < 1.37)
+- [x] Auto-refresh toutes les 2 s via `st.rerun()`
 
 **Critère d'acceptation :** Heatmap se met à jour automatiquement. ✅
 
@@ -312,27 +330,33 @@ Phase 8 : Extensions (facultatif)
 
 ## Phase 7 — Tests
 
-### Étape 7.1 — Tests unitaires
+### Étape 7.1 — Couverture et tests unitaires consolidés
 
 **Tâches :**
-- [x] `tests/conftest.py` : fixtures partagées ✅
-- [x] `tests/test_physics.py` (35 cas) ✅
-- [x] `tests/test_config.py` (14 cas) ✅
-- [x] `tests/test_machine.py` (≥ 8 cas) ✅
-- [ ] `pytest --cov=simulation --cov=config --cov=api --cov-report=html`
+- [x] `tests/conftest.py` : fixtures partagées
+- [x] `tests/test_physics.py`
+- [x] `tests/test_config.py`
+- [x] `tests/test_machine.py`
+- [ ] Ajouter la couverture `api`
+- [ ] Ajouter la couverture `consumer`
+- [ ] Exécuter `pytest tests/ -v --cov=simulation --cov=config --cov=api --cov=consumer --cov-report=html --cov-report=term-missing`
 
-**Critère d'acceptation :** 100% pass, couverture ≥ 80%.
+**Critère d'acceptation :** couverture globale ≥ 80% sur les modules critiques.
 
 ---
 
 ### Étape 7.2 — Tests d'intégration
 
 **Tâches :**
-- [ ] Fixture `mqtt_broker` lançant `amqtt` sur un port aléatoire
-- [ ] `tests/test_api.py` avec `httpx.AsyncClient(app=app, base_url="http://test")`
-- [ ] Test flux complet : `ClusterSimulator.run()` 5s → messages publiés sur broker `amqtt`
+- [ ] Créer `tests/test_api.py` avec `httpx` / client de test FastAPI
+- [ ] Vérifier `GET /`, `/cluster/status`, `/cluster/energy`
+- [ ] Vérifier les erreurs `404` et `409`
+- [ ] Tester `/simulation/fault` et `/simulation/scenario`
+- [ ] Tester le flux WebSocket `/ws/cluster`
+- [ ] Ajouter un test MQTT end-to-end avec broker de test
+- [ ] Ajouter un test d'ingestion MQTT → TimescaleDB
 
-**Critère d'acceptation :** `pytest tests/test_api.py` → 100% pass.
+**Critère d'acceptation :** flux principaux validés automatiquement en CI locale.
 
 ---
 
@@ -362,9 +386,10 @@ Phase 8 : Extensions (facultatif)
 
 1. **Lire** `documents/specifications.md` en entier (~30 min)
 2. **Cloner** le dépôt et créer une branche `feature/phase-7-tests`
-3. **Lancer** `MQTT_ENABLED=0 uvicorn api.main:app --reload` pour avoir l'API disponible
-4. **Valider** chaque étape avec ses tests avant de passer à la suivante
-5. **Utiliser** `docker compose up mosquitto` pour le broker MQTT
+3. **Lancer** `docker compose up -d` pour disposer du noyau complet
+4. **Tester** l'API sur `http://localhost:8000/docs`
+5. **Activer** le profil storage avec `docker compose --profile storage up -d` si nécessaire
+6. **Valider** les étapes Phase 7 avant de démarrer une extension Phase 8
 
 ---
 

@@ -98,8 +98,8 @@ class MqttConsumer:
 
         # Température principale : premier capteur trouvé
         sensors = data.get("sensors", [])
-        temp_c = sensors[0].get("temp_c") if sensors else data.get("temperature_c")
-
+        # avant FIX #07 temp_c = sensors[0].get("temp_c") if sensors else data.get("temperature_c")
+        temp_c = data.get("temperature_c")
         # Vitesse moyenne des fans
         fans = data.get("fans", [])
         fan_rpm_avg = (
@@ -121,7 +121,7 @@ class MqttConsumer:
                 data.get("status"),
                 temp_c,
                 data.get("power_w"),
-                data.get("energy_kwh"),
+                data.get("energy_kwh_cumulated"),
                 data.get("load_factor"),
                 fan_rpm_avg,
             )
@@ -150,6 +150,7 @@ class MqttConsumer:
                 event_type,
                 json.dumps(data),
             )
+            
 
 
 async def _wait_for_postgres(dsn: str, retries: int = 20, delay: float = 3.0) -> asyncpg.Pool:

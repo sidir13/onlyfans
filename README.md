@@ -15,8 +15,8 @@
 | 3 — MQTT (publisher aiomqtt, intégration cluster) | ✅ Complète |
 | 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
 | 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
-| 6 — Déploiement Docker (Compose noyau + profil storage) | 🔄 En cours |
-| 7 — Tests d'intégration | 🔜 À venir |
+| 6 — Déploiement Docker (Compose noyau + profil storage) | ✅ Complète |
+| 7 — Tests d'intégration | 🔄 Prochaine priorité |
 | 8 — Extensions pédagogiques | 🔜 Facultatif |
 
 ---
@@ -87,13 +87,64 @@ Services supplémentaires :
 | `SCENARIO` | `nominal` | Scénario de charge |
 | `CLUSTER_ID` | `cluster_alpha` | Identifiant du cluster |
 | `MQTT_ENABLED` | `1` | Désactiver MQTT (`0`) |
-| `POSTGRES_PASSWORD` | `tspassword` | Mot de passe TimescaleDB |
+| `POSTGRES_PASSWORD` | `jumeaux` | Mot de passe TimescaleDB / Grafana datasource |
 
 ### Arrêt et nettoyage
 
 ```bash
-docker compose down          # arrêt noyau
-docker compose --profile storage down -v   # arrêt + suppression volumes
+docker compose down
+docker compose --profile storage down -v
+```
+
+---
+
+## Accès aux services
+
+### Depuis la machine hôte / un client externe
+
+| Service | URL / hôte | Port | Détails |
+|---|---|---:|---|
+| API FastAPI | `http://localhost:8000` | 8000 | Endpoint racine `/` |
+| Documentation OpenAPI | `http://localhost:8000/docs` | 8000 | Swagger UI |
+| WebSocket cluster | `ws://localhost:8000/ws/cluster` | 8000 | Flux temps réel du snapshot |
+| Dashboard Streamlit | `http://localhost:8501` | 8501 | Interface utilisateur |
+| Broker MQTT Mosquitto | `localhost` | 1883 | Accès MQTT TCP |
+| MQTT over WebSocket | `ws://localhost:9001` | 9001 | Pour clients MQTT WebSocket |
+| TimescaleDB | `localhost` | 5432 | Base PostgreSQL/TimescaleDB |
+| Grafana | `http://localhost:3000` | 3000 | Login par défaut : `admin / admin` |
+
+### Depuis un autre conteneur Docker du même réseau Compose
+
+| Service | Adresse interne | Port |
+|---|---|---:|
+| API FastAPI | `http://iot-twin:8000` | 8000 |
+| Dashboard Streamlit | `http://dashboard:8501` | 8501 |
+| Mosquitto MQTT | `mosquitto` | 1883 |
+| Mosquitto WebSocket | `mosquitto` | 9001 |
+| TimescaleDB | `timescaledb` | 5432 |
+| Grafana | `http://grafana:3000` | 3000 |
+
+### Exemples d'accès
+
+```bash
+# Vérifier l'API
+curl http://localhost:8000/
+
+# Consulter la doc interactive
+# http://localhost:8000/docs
+
+# Tester le WebSocket temps réel
+wscat -c ws://localhost:8000/ws/cluster
+
+# S'abonner aux topics MQTT
+mosquitto_sub -h localhost -t 'dt/#' -v
+
+# Se connecter à TimescaleDB
+psql -h localhost -p 5432 -U jumeaux -d jumeaux
+
+# Ouvrir Grafana
+# http://localhost:3000
+# login: admin / admin
 ```
 
 ---
@@ -105,10 +156,10 @@ simulation/      Modèle physique thermique, MachineSimulator, ClusterSimulator
 mqtt/            MqttPublisher aiomqtt (Phase 3 ✅)
 api/             FastAPI lifespan + endpoints REST + WebSocket (Phase 4 ✅)
 dashboard/       Streamlit temps réel (Phase 5 ✅)
-consumer/        MQTT → TimescaleDB (Phase 6 🔄)
+consumer/        MQTT → TimescaleDB (Phase 6 ✅)
 config/          YAML hiérarchique OmegaConf (base + scénarios)
 tests/           pytest + pytest-asyncio
-grafana/         Provisioning datasource + dashboard (Phase 6 🔄)
+grafana/         Provisioning datasource + dashboard (Phase 6 ✅)
 mosquitto/       Configuration broker MQTT
 ```
 
@@ -154,7 +205,7 @@ et [`documents/roadmap.md`](documents/roadmap.md) pour le suivi d'avancement.
 
 ## Structure du projet
 
-```
+```text
 jumeaux-chauds/
 ├── config/
 │   ├── base.yaml
@@ -184,10 +235,10 @@ jumeaux-chauds/
 │   ├── app.py
 │   ├── ws_client.py
 │   └── api_client.py
-├── consumer/                 ← Phase 6 🔄
+├── consumer/                 ← Phase 6 ✅
 │   ├── mqtt_to_timescale.py
 │   └── schema.sql
-├── grafana/                  ← Phase 6 🔄
+├── grafana/                  ← Phase 6 ✅
 │   └── provisioning/
 │       ├── datasources/
 │       │   └── timescale.yaml
@@ -209,8 +260,24 @@ jumeaux-chauds/
 ├── requirements.txt
 ├── requirements.dashboard.txt
 ├── requirements.consumer.txt
-└── requirements.test.txt
+├── requirements.test.txt
+└── Makefile
 ```
+
+---
+
+## Prochaine étape de développement
+
+La prochaine priorité du projet est la **Phase 7 — Tests d'intégration et couverture**.
+
+Objectifs :
+- sécuriser les endpoints FastAPI ;
+- valider le flux WebSocket temps réel ;
+- tester la publication MQTT de bout en bout ;
+- vérifier l'ingestion MQTT → TimescaleDB ;
+- mesurer et améliorer la couverture de code.
+
+Cette étape permettra de stabiliser le socle existant avant d'ajouter de nouvelles extensions pédagogiques ou des fonctionnalités avancées d'observabilité.
 
 ---
 

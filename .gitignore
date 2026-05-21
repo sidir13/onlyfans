@@ -60,3 +60,6 @@ logs/
 # Artefacts de build
 *.tar.gz
 *.zip
+
+
+hotfans/

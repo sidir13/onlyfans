@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "juste-ventilateurs"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "aiomqtt>=2.4.0",
+    "pandas>=2.2.0",
+    "pyarrow>=14.0.0",
+    "psycopg2-binary>=2.9.0",
+]
+
+[tool.setuptools]
+packages = [
+    "juste_ventilateurs",
+    "juste_ventilateurs.ingest",
+    "juste_ventilateurs.features",
+    "juste_ventilateurs.models",
+]
+
+[tool.setuptools.package-dir]
+# Mappe le nom Python (underscore) vers le dossier (tiret) du projet
+"juste_ventilateurs" = "."

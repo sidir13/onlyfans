@@ -1,0 +1,130 @@
+# ── Jumeaux Chauds — Docker Compose ──────────────────────────────────
+# Noyau  : mosquitto + iot-twin + dashboard
+# Storage: ajouter --profile storage pour TimescaleDB + consumer + Grafana
+
+services:
+
+  # ── Broker MQTT ────────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"           # WebSocket MQTT (optionnel)
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "_health", "-m", "ping", "-q", "0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Simulateur + API FastAPI ────────────────────────────────────────
+  iot-twin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot-twin
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      SCENARIO: ${SCENARIO:-nominal}
+      CLUSTER_ID: ${CLUSTER_ID:-cluster_alpha}
+      MQTT_ENABLED: ${MQTT_ENABLED:-1}
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # ── Dashboard Streamlit ─────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: dashboard
+    restart: unless-stopped
+    depends_on:
+      iot-twin:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE_URL: http://iot-twin:8000
+
+  # ── TimescaleDB (profil storage) ────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb
+    profiles: ["storage"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jumeaux
+      POSTGRES_USER: jumeaux
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jumeaux}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./consumer/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jumeaux -d jumeaux"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Consumer MQTT → TimescaleDB (profil storage) ────────────────────
+  mqtt-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: mqtt-consumer
+    profiles: ["storage"]
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+      POSTGRES_HOST: timescaledb
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: jumeaux
+      POSTGRES_USER: jumeaux
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jumeaux}
+
+  # ── Grafana (profil storage) ────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    profiles: ["storage"]
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  timescale_data:
+  grafana_data:

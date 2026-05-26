@@ -1,0 +1,1 @@
+"""Package FastAPI — Jumeaux Chauds."""
